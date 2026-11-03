@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>경제 실험실 · 선생님</title>
+<link rel="stylesheet" href="../shared/common.css">
+<style>
+  .layout { display: grid; grid-template-columns: 1fr 300px; gap: 18px; align-items: start; }
+  .stage { min-height: 520px; display: flex; flex-direction: column; gap: 18px; }
+  .stage-head { display: flex; align-items: center; gap: 16px; }
+  .round-no { background: var(--accent); color: #fff; border-radius: 12px; padding: 4px 12px; font-weight: 800; }
+  .stage h1 { font-size: 2.4rem; }
+  .rule { font-size: 1.45rem; font-weight: 600; }
+  .think { font-size: 1.2rem; background: #eef6f5; border-radius: 12px; padding: 14px 18px; }
+  .lines { display: flex; flex-direction: column; gap: 10px; font-size: 1.35rem; }
+  .lines div { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .bigstat { font-size: 3.4rem; font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+  .side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px; }
+  .plist { max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+  .pitem { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: #faf6ec; font-size: .95rem; }
+  .pitem .dot { width: 10px; height: 10px; border-radius: 50%; background: #d6cdb8; flex: none; }
+  .pitem .dot.on { background: var(--good); }
+  .pitem .x { margin-left: auto; border: 0; background: none; color: var(--muted); font-size: 1rem; }
+  .steps { display: flex; gap: 6px; flex-wrap: wrap; }
+  .steps span { font-size: .85rem; padding: 4px 10px; border-radius: 999px; background: #efe8d8; }
+  .steps span.now { background: var(--ink); color: #fff; }
+  .join { font-size: 1.1rem; word-break: break-all; }
+  .join b { color: var(--accent-2); }
+  .settings label { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+  details summary { cursor: pointer; font-weight: 700; }
+  .vote-bars .bar-row { grid-template-columns: 120px 1fr 60px; font-size: 1.2rem; }
+  .vote-bars .bar-track { height: 28px; }
+  .podium { display: flex; flex-direction: column; gap: 8px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .side { position: static; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">🧪 경제 실험실</div>
+    <div id="codePill" class="code-pill hidden">수업 코드<b id="codeText"></b></div>
+    <div class="grow"></div>
+    <span id="mode"></span>
+  </div>
+
+  <!-- 로그인 -->
+  <div id="loginView" class="card" style="max-width:420px;margin:60px auto">
+    <h2>선생님 화면</h2>
+    <p class="muted">비밀번호는 shared/firebase-config.js 에서 바꿀 수 있어요.</p>
+    <div class="field"><input id="pw" type="password" placeholder="비밀번호" autocomplete="off"></div>
+    <div style="height:12px"></div>
+    <button class="btn big" id="pwBtn" style="width:100%">들어가기</button>
+  </div>
+
+  <!-- 방 만들기 -->
+  <div id="setupView" class="card hidden" style="max-width:520px;margin:40px auto">
+    <h2>수업 시작하기</h2>
+    <p class="muted">새 수업 코드를 만들면 학생들이 그 코드로 들어와요.</p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn big accent" id="newRoomBtn">새 수업 코드 만들기</button>
+      <button class="btn big ghost hidden" id="resumeBtn"></button>
+    </div>
+  </div>
+
+  <!-- 게임 -->
+  <div id="gameView" class="layout hidden">
+    <div class="card stage" id="stage"></div>
+    <div class="side">
+      <div class="card">
+        <div class="row"><b>다음 진행</b><div class="grow"></div><span id="timerSide" class="muted"></span></div>
+        <div class="steps" id="steps" style="margin:10px 0"></div>
+        <button class="btn big accent" id="nextBtn" style="width:100%"></button>
+        <div class="row" style="margin-top:10px">
+          <select id="roundSel" class="grow" style="padding:8px;border-radius:10px;border:2px solid var(--line)"></select>
+          <button class="btn ghost" id="jumpBtn">시작</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn ghost grow" id="replayBtn">이 라운드 다시</button>
+          <button class="btn ghost grow" id="endBtn">최종 순위</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row"><b>참가 학생</b><span class="chip" id="pcount">0명</span></div>
+        <div class="plist" id="plist" style="margin-top:8px"></div>
+      </div>
+      <div class="card settings">
+        <details>
+          <summary>⚙️ 설정</summary>
+          <div style="margin-top:8px"><b>문제 범위</b></div>
+          <div id="setBoxes"></div>
+          <label>문제 풀기 시간
+            <select id="workSec"><option value="60">60초</option><option value="90">90초</option><option value="120">120초</option><option value="180">180초</option></select></label>
+          <label>선택·투표 시간
+            <select id="chooseSec"><option value="30">30초</option><option value="40">40초</option><option value="60">60초</option><option value="90">90초</option></select></label>
+          <label><input type="checkbox" id="fineOn"> 담합 라운드: 공정위 단속</label>
+          <label><input type="checkbox" id="envTax"> 굴뚝 라운드: 환경세(300원)</label>
+          <div class="row" style="margin-top:8px">
+            <button class="btn ghost" id="resetBtn">모든 돈 초기화</button>
+            <button class="btn ghost" id="newCodeBtn">새 코드</button>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { createBackend, $, esc, won, signed, newCode, modeBadge } from "../shared/backend.js";
+import { TEACHER_PASSWORD } from "../shared/firebase-config.js";
+import { ROUNDS, TAX_OPTIONS, STEP_NAMES, START_CASH, computeRound, tallyTax, producedOf } from "./rounds.js";
+import { QUESTION_SETS } from "./questions.js";
+
+const GAME = "lab";
+let be, code, room = null, players = {}, unsubs = [];
+
+function toast(msg) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2200);
+}
+
+/* ---------- 로그인 ---------- */
+$("#pwBtn").onclick = login;
+$("#pw").onkeydown = (e) => e.key === "Enter" && login();
+if (sessionStorage.getItem("econ-teacher") === "ok") login(true);
+
+async function login(skip) {
+  if (!skip && $("#pw").value !== TEACHER_PASSWORD) return toast("비밀번호가 달라요");
+  sessionStorage.setItem("econ-teacher", "ok");
+  $("#loginView").classList.add("hidden");
+  try { be = await createBackend(); }
+  catch (e) { console.error(e); alert("서버 연결 실패: Firebase 설정과 익명 로그인 사용 설정을 확인해 주세요.\n" + e.message); return; }
+  $("#mode").innerHTML = modeBadge(be);
+  const last = localStorage.getItem("econ-lab-code");
+  if (last) {
+    const r = await be.getRoom(GAME, last);
+    if (r) { $("#resumeBtn").textContent = `이어서 하기 (코드 ${last})`; $("#resumeBtn").classList.remove("hidden"); $("#resumeBtn").onclick = () => openRoom(last); }
+  }
+  $("#setupView").classList.remove("hidden");
+}
+
+$("#newRoomBtn").onclick = createRoom;
+$("#newCodeBtn").onclick = () => { if (confirm("새 수업 코드를 만들까요? 학생들은 새 코드로 다시 들어와야 해요.")) createRoom(); };
+
+async function createRoom() {
+  let c;
+  for (let i = 0; i < 20; i++) { c = newCode(); if (!(await be.getRoom(GAME, c))) break; }
+  await be.setRoom(GAME, c, {
+    game: GAME, host: be.uid, createdAt: Date.now(),
+    phase: "lobby", roundIdx: 0, seq: 0, endsAt: 0, taxRate: 0,
+    settings: { sets: [1, 2, 3, 4], workSec: 90, chooseSec: 40, fineOn: false, envTax: false },
+    stats: {}, result: null,
+  });
+  openRoom(c);
+}
+
+function openRoom(c) {
+  code = c;
+  localStorage.setItem("econ-lab-code", c);
+  unsubs.forEach((u) => u()); unsubs = [];
+  $("#setupView").classList.add("hidden");
+  $("#gameView").classList.remove("hidden");
+  $("#codePill").classList.remove("hidden");
+  $("#codeText").textContent = c;
+  unsubs.push(be.watchRoom(GAME, c, (r) => { room = r; render(); }));
+  unsubs.push(be.watchPlayers(GAME, c, (p) => { players = p || {}; render(); }));
+  buildSettings();
+}
+
+/* ---------- 진행 ---------- */
+const round = () => ROUNDS[room.roundIdx] || ROUNDS[0];
+const patch = (p) => be.updateRoom(GAME, code, p);
+
+function nextLabel() {
+  if (!room) return "";
+  if (room.phase === "lobby") return `▶ 1라운드 시작: ${ROUNDS[0].title}`;
+  if (room.phase === "end") return "게임 끝";
+  if (room.phase === "result") {
+    const n = room.roundIdx + 1;
+    return n < ROUNDS.length ? `▶ ${n + 1}라운드: ${ROUNDS[n].title}` : "▶ 최종 순위 보기";
+  }
+  const steps = round().steps;
+  const nxt = steps[steps.indexOf(room.phase) + 1];
+  return `▶ ${STEP_NAMES[nxt]}`;
+}
+
+$("#nextBtn").onclick = async () => {
+  if (!room) return;
+  $("#nextBtn").disabled = true;
+  try {
+    if (room.phase === "lobby") await startRound(0);
+    else if (room.phase === "result") {
+      if (room.roundIdx + 1 < ROUNDS.length) await startRound(room.roundIdx + 1);
+      else await patch({ phase: "end" });
+    } else if (room.phase !== "end") {
+      const steps = round().steps;
+      await enterStep(steps[steps.indexOf(room.phase) + 1]);
+    }
+  } finally { $("#nextBtn").disabled = false; }
+};
+$("#jumpBtn").onclick = () => startRound(+$("#roundSel").value);
+$("#replayBtn").onclick = () => room && room.phase !== "lobby" && room.phase !== "end" ? startRound(room.roundIdx) : startRound(room ? room.roundIdx : 0);
+$("#endBtn").onclick = () => confirm("최종 순위 화면으로 갈까요?") && patch({ phase: "end" });
+
+function startRound(idx) {
+  return patch({ roundIdx: idx, seq: (room.seq || 0) + 1, phase: "intro", endsAt: 0, result: null, taxRate: 0 });
+}
+
+async function enterStep(step) {
+  const s = room.settings;
+  const p = { phase: step, endsAt: 0 };
+  if (room.phase === "vote") p.taxRate = tallyTax(players, room.seq).rate;
+  if (step === "work") p.endsAt = Date.now() + s.workSec * 1000;
+  if (step === "vote" || step === "choose") p.endsAt = Date.now() + s.chooseSec * 1000;
+  if (step === "result") return applyResult(p);
+  await patch(p);
+}
+
+async function applyResult(p) {
+  if (room.result && room.result.seq === room.seq) return patch(p);
+  const r = round();
+  const merged = { ...room, ...p };
+  const { deltas, lines, stats } = computeRound(r, players, merged);
+  const updates = {}, rows = [];
+  for (const id in deltas) {
+    const pl = players[id] || {};
+    const cash = (typeof pl.cash === "number" ? pl.cash : START_CASH) + deltas[id].delta;
+    updates[id] = { cash, last: { seq: room.seq, delta: deltas[id].delta, note: deltas[id].note, title: r.title } };
+    rows.push({ name: pl.name || "?", delta: deltas[id].delta, cash });
+  }
+  await be.updatePlayers(GAME, code, updates);
+  rows.sort((a, b) => b.delta - a.delta);
+  const st = { ...(room.stats || {}) };
+  st[r.id] = stats.total;
+  await patch({ ...p, result: { seq: room.seq, roundIdx: room.roundIdx, lines, rows }, stats: st });
+}
+
+$("#resetBtn").onclick = async () => {
+  if (!confirm("모든 학생의 돈을 처음(1,000원)으로 되돌릴까요?")) return;
+  const u = {}; for (const id in players) u[id] = { cash: START_CASH, last: null };
+  await be.updatePlayers(GAME, code, u);
+  await patch({ stats: {}, result: null, phase: "lobby", roundIdx: 0 });
+};
+
+/* ---------- 설정 ---------- */
+function buildSettings() {
+  $("#roundSel").innerHTML = ROUNDS.map((r, i) => `<option value="${i}">${i + 1}. ${r.emoji} ${r.title}</option>`).join("");
+  $("#setBoxes").innerHTML = Object.entries(QUESTION_SETS).map(([k, v]) => `<label><input type="checkbox" data-set="${k}"> ${v}</label>`).join("");
+  document.querySelectorAll("[data-set]").forEach((el) => (el.onchange = saveSettings));
+  ["workSec", "chooseSec", "fineOn", "envTax"].forEach((id) => ($("#" + id).onchange = saveSettings));
+}
+function syncSettings() {
+  const s = room.settings || {};
+  document.querySelectorAll("[data-set]").forEach((el) => (el.checked = (s.sets || []).includes(+el.dataset.set)));
+  $("#workSec").value = s.workSec; $("#chooseSec").value = s.chooseSec;
+  $("#fineOn").checked = !!s.fineOn; $("#envTax").checked = !!s.envTax;
+}
+function saveSettings() {
+  let sets = [...document.querySelectorAll("[data-set]:checked")].map((el) => +el.dataset.set);
+  if (!sets.length) { sets = [1]; toast("문제 범위는 하나 이상 골라 주세요"); }
+  patch({ settings: { sets, workSec: +$("#workSec").value, chooseSec: +$("#chooseSec").value, fineOn: $("#fineOn").checked, envTax: $("#envTax").checked } });
+}
+
+/* ---------- 화면 그리기 ---------- */
+function studentURL() {
+  const u = new URL("student.html", location.href);
+  if (be.mode === "demo") u.searchParams.set("demo", "1");
+  return u.href;
+}
+
+function remain() { return room && room.endsAt ? Math.max(0, Math.ceil((room.endsAt - Date.now()) / 1000)) : null; }
+
+function render() {
+  if (!room) return;
+  syncSettings();
+  const ids = Object.keys(players);
+  $("#pcount").textContent = ids.length + "명";
+  const seq = room.seq;
+  const active = (p) =>
+    room.phase === "work" ? p.seq === seq && (p.tried || 0) > 0 :
+    room.phase === "choose" ? p.choiceSeq === seq :
+    room.phase === "vote" ? p.voteSeq === seq : true;
+  $("#plist").innerHTML = ids
+    .sort((a, b) => (players[a].name || "").localeCompare(players[b].name || "", "ko"))
+    .map((id) => `<div class="pitem"><span class="dot ${active(players[id]) ? "on" : ""}"></span>${esc(players[id].name)}<span class="muted" style="margin-left:6px">${won(players[id].cash ?? START_CASH)}</span><button class="x" title="내보내기" data-kick="${id}">✕</button></div>`)
+    .join("") || `<div class="muted">아직 아무도 없어요</div>`;
+  document.querySelectorAll("[data-kick]").forEach((b) => (b.onclick = () => {
+    const p = players[b.dataset.kick];
+    if (confirm(`${p.name} 학생을 내보낼까요?`)) be.deletePlayer(GAME, code, b.dataset.kick);
+  }));
+
+  const r = round();
+  $("#steps").innerHTML = room.phase === "lobby" || room.phase === "end" ? "" :
+    r.steps.map((s) => `<span class="${s === room.phase ? "now" : ""}">${STEP_NAMES[s]}</span>`).join("");
+  $("#nextBtn").textContent = nextLabel();
+  $("#nextBtn").disabled = room.phase === "end";
+  $("#roundSel").value = room.roundIdx;
+
+  const st = $("#stage");
+  const head = `<div class="stage-head"><span class="round-no">${room.roundIdx + 1}라운드</span><span class="big-emoji">${r.emoji}</span><h1 style="margin:0">${r.title}</h1></div>`;
+  const n = ids.length;
+
+  if (room.phase === "lobby") {
+    st.innerHTML = `
+      <h1>학생들은 이렇게 들어와요</h1>
+      <div class="join">① 주소: <b>${esc(studentURL())}</b></div>
+      <div class="join">② 수업 코드 <b style="font-size:2.6rem;letter-spacing:.15em;color:var(--accent)">${code}</b> 와 이름 입력</div>
+      <div class="concept">모든 학생은 <b>${won(START_CASH)}</b>으로 시작해요. 라운드마다 <b>경제 규칙</b>이 바뀌니, 규칙이 바뀌면 사람들의 행동이 어떻게 달라지는지 지켜보세요!</div>
+      <div><b>들어온 학생 ${n}명</b></div>
+      <div class="chips">${ids.map((id) => `<span class="chip">${esc(players[id].name)}</span>`).join("")}</div>`;
+  } else if (room.phase === "intro") {
+    st.innerHTML = `${head}
+      <div class="rule">${r.rule}</div>
+      <div class="think">🤔 ${r.think}</div>
+      ${r.id === "cartel" && room.settings.fineOn ? `<div class="concept">🚨 이번 판은 <b>공정 거래 위원회</b>가 지켜보고 있어요!</div>` : ""}
+      ${r.id === "extern" && room.settings.envTax ? `<div class="concept">🧾 이번 판은 공장을 돌리면 <b>환경세 300원</b>을 내요. 걷은 세금은 모두에게 나눠 줘요.</div>` : ""}`;
+  } else if (room.phase === "vote") {
+    const { cnt } = tallyTax(players, seq);
+    const max = Math.max(1, ...Object.values(cnt));
+    const voted = Object.values(cnt).reduce((a, b) => a + b, 0);
+    st.innerHTML = `${head}
+      <div class="row"><h2 class="grow">세금을 얼마나 걷을까요?</h2><span class="timer" data-timer></span></div>
+      <div class="bars vote-bars">${TAX_OPTIONS.map((o) => `<div class="bar-row"><div class="name">${o.sub} ${o.label}</div><div class="bar-track"><div class="bar-fill" style="width:${(cnt[o.v] / max) * 100}%"></div></div><div class="val">${cnt[o.v]}표</div></div>`).join("")}</div>
+      <div class="muted">투표한 학생 ${voted} / ${n}명</div>`;
+  } else if (room.phase === "work") {
+    const total = ids.reduce((s, id) => s + producedOf(players[id], seq), 0);
+    const working = ids.filter((id) => players[id].seq === seq && (players[id].tried || 0) > 0).length;
+    st.innerHTML = `${head}
+      <div class="row"><h2 class="grow">📚 문제를 풀어 생산하세요!</h2><span class="timer" data-timer></span></div>
+      <div class="muted">반 전체 생산</div>
+      <div class="bigstat">${won(total)}</div>
+      <div class="muted">참여 중 ${working} / ${n}명</div>
+      ${r.id === "mixed" ? `<div class="concept">투표 결과 세율: <b>${room.taxRate}%</b></div>` : ""}
+      <div class="think">🤔 ${r.think}</div>`;
+  } else if (room.phase === "choose") {
+    const done = ids.filter((id) => players[id].choiceSeq === seq).length;
+    st.innerHTML = `${head}
+      <div class="row"><h2 class="grow">🤫 몰래 선택하세요</h2><span class="timer" data-timer></span></div>
+      <div class="rule">${r.rule}</div>
+      <div class="bigstat">${done} / ${n}명 선택 완료</div>
+      <div class="muted">누가 무엇을 골랐는지는 결과에서만 공개돼요 (선택 안 하면 ${r.id === "cartel" ? "'비싸게'" : r.id === "public" ? "'안 내기'" : "'멈춤'"}으로 처리)</div>`;
+  } else if (room.phase === "result") {
+    const res = room.result || { lines: [], rows: [] };
+    const maxAbs = Math.max(1, ...res.rows.map((x) => Math.abs(x.delta)));
+    st.innerHTML = `${head}
+      <div class="lines">${res.lines.map((l) => `<div>${l}</div>`).join("")}</div>
+      <div class="concept">📖 ${r.concept}</div>
+      <details ${res.rows.length <= 25 ? "open" : ""}><summary>이번 라운드에 번 돈 (높은 순)</summary>
+        <div class="bars" style="margin-top:10px">${res.rows.map((x) => `<div class="bar-row"><div class="name">${esc(x.name)}</div><div class="bar-track"><div class="bar-fill ${x.delta < 0 ? "neg" : ""}" style="width:${(Math.abs(x.delta) / maxAbs) * 100}%"></div></div><div class="val ${x.delta < 0 ? "neg" : ""}">${signed(x.delta)}</div></div>`).join("")}</div>
+      </details>`;
+  } else if (room.phase === "end") {
+    const rows = ids.map((id) => ({ name: players[id].name, cash: players[id].cash ?? START_CASH })).sort((a, b) => b.cash - a.cash);
+    const total = rows.reduce((s, x) => s + x.cash, 0);
+    const max = Math.max(1, ...rows.map((x) => x.cash));
+    const st2 = room.stats || {};
+    st.innerHTML = `
+      <h1>🏆 최종 결과</h1>
+      <div class="row"><div><div class="muted">반 전체 재산</div><div class="bigstat">${won(total)}</div></div>
+        <div><div class="muted">한 사람 평균</div><div class="bigstat" style="font-size:2.4rem">${won(total / Math.max(1, rows.length))}</div></div></div>
+      ${typeof st2.plan === "number" && typeof st2.market === "number" ? `<div class="concept">생산량 비교 — 계획경제 <b>${won(st2.plan)}</b> · 시장경제 <b>${won(st2.market)}</b>${typeof st2.mixed === "number" ? ` · 혼합경제 <b>${won(st2.mixed)}</b>` : ""}</div>` : ""}
+      <div class="bars podium">${rows.map((x, i) => `<div class="bar-row"><div class="name">${i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1 + "."} ${esc(x.name)}</div><div class="bar-track"><div class="bar-fill" style="width:${(Math.max(0, x.cash) / max) * 100}%"></div></div><div class="val">${won(x.cash)}</div></div>`).join("")}</div>
+      <div class="think">🤔 오늘 해 본 경제 규칙 중 우리 반에 가장 좋은 규칙은 무엇이었나요? 왜 그렇게 생각하나요?</div>`;
+  }
+  tick();
+}
+
+function tick() {
+  const s = remain();
+  document.querySelectorAll("[data-timer]").forEach((el) => {
+    el.textContent = s === null ? "" : s > 0 ? `${s}초` : "시간 끝!";
+    el.classList.toggle("low", s !== null && s <= 10);
+  });
+  $("#timerSide").textContent = s === null ? "" : s > 0 ? `남은 시간 ${s}초` : "시간 끝";
+}
+setInterval(tick, 250);
+</script>
+</body>
+</html>

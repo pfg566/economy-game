@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>금융 투자 타임머신</title>
+<link rel="stylesheet" href="../shared/common.css">
+<style>
+  :root { --accent: #2f5bd3; }
+  .news div { background: #f3f5fb; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-weight: 600; }
+  .asset { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .asset:last-child { border-bottom: 0; }
+  .asset .nm { font-weight: 800; font-size: 1.05rem; }
+  .asset .ds { font-size: .82rem; color: var(--muted); }
+  .asset .tg { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+  .asset .tg span { font-size: .72rem; background: #efe8d8; border-radius: 6px; padding: 1px 6px; }
+  .stepper { display: flex; align-items: center; gap: 6px; }
+  .stepper button { width: 44px; height: 44px; border-radius: 12px; border: 2px solid var(--line); background: #fff; font-size: 1.4rem; font-weight: 800; color: var(--ink); }
+  .stepper button:active { background: #f3efe4; }
+  .stepper .v { width: 56px; text-align: center; font-weight: 900; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+  .stepper .v small { display: block; font-size: .7rem; color: var(--muted); font-weight: 600; }
+  .mix { display: flex; height: 18px; border-radius: 9px; overflow: hidden; background: #efe8d8; margin: 8px 0 4px; }
+  .mix span { height: 100%; transition: width .2s; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .presets button { border: 2px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: .85rem; }
+  .bigdelta { font-size: 2.6rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+  .brk div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--line); font-variant-numeric: tabular-nums; }
+  .sticky-go { position: sticky; bottom: 10px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="student">
+  <div class="topbar" style="margin-bottom:12px"><div class="brand">⏳ 투자 타임머신</div><div class="grow"></div><span id="mode"></span></div>
+
+  <div id="joinView" class="card">
+    <h2>수업에 들어가기</h2>
+    <div class="field"><label>수업 코드 (숫자 4자리)</label><input id="codeIn" inputmode="numeric" maxlength="4" placeholder="예: 1234"></div>
+    <div style="height:10px"></div>
+    <div class="field"><label>이름 (번호+이름)</label><input id="nameIn" maxlength="12" placeholder="예: 7 김임실"></div>
+    <div style="height:14px"></div>
+    <button class="btn huge accent" id="joinBtn">들어가기</button>
+    <p class="muted" id="joinMsg"></p>
+  </div>
+
+  <div id="gameView" class="hidden">
+    <div class="status-line"><div><span class="muted">나</span> <b id="meName"></b></div><div class="money" id="meCash"></div></div>
+    <div class="card" id="screen"></div>
+  </div>
+</div>
+
+<script type="module">
+import { createBackend, $, esc, won, signed, modeBadge } from "../shared/backend.js";
+import { YEARS, ASSETS, RETURNS, NEWS, RECAP, START_MONEY } from "./data.js";
+import { normalize, grow, assetName, countAssets } from "./calc.js";
+
+const GAME = "invest";
+const COLORS = { dep: "#8a94a6", bond: "#5b7db8", fund: "#e8a33a", ss: "#2f5bd3", hy: "#1f8a83", nv: "#3fae5a", kk: "#d9a400", ka: "#c2412d" };
+let be, code, room = null, me = null, players = {}, draft = null, draftSeq = -1, lastKey = "";
+
+function toast(m) { const t = document.createElement("div"); t.className = "toast"; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 1800); }
+const pct = (x) => (x > 0 ? "+" : "") + x.toFixed(1) + "%";
+
+(async () => {
+  try { be = await createBackend(); } catch (e) { $("#joinMsg").textContent = "서버에 연결하지 못했어요."; return; }
+  $("#mode").innerHTML = modeBadge(be);
+  const saved = JSON.parse(localStorage.getItem("econ-invest-me") || "null");
+  if (saved) { $("#codeIn").value = saved.code; $("#nameIn").value = saved.name; }
+})();
+
+$("#joinBtn").onclick = join;
+$("#nameIn").onkeydown = (e) => e.key === "Enter" && join();
+
+async function join() {
+  const c = $("#codeIn").value.trim(), name = $("#nameIn").value.trim();
+  if (!/^\d{4}$/.test(c)) return ($("#joinMsg").textContent = "수업 코드 4자리를 확인해 주세요.");
+  if (!name) return ($("#joinMsg").textContent = "이름을 입력해 주세요.");
+  const r = await be.getRoom(GAME, c);
+  if (!r) return ($("#joinMsg").textContent = "그런 수업 코드가 없어요.");
+  code = c;
+  localStorage.setItem("econ-invest-me", JSON.stringify({ code: c, name }));
+  const existing = await new Promise((res) => { const u = be.watchPlayers(GAME, c, (ps) => { res(ps || {}); setTimeout(() => u && u(), 0); }); });
+  const init = existing[be.uid] ? { name } : { name, wealth: START_MONEY, history: [START_MONEY], lastAlloc: { dep: 100 }, joinedAt: Date.now() };
+  await be.updatePlayer(GAME, c, be.uid, init);
+  $("#joinView").classList.add("hidden"); $("#gameView").classList.remove("hidden");
+  $("#meName").textContent = name;
+  be.watchRoom(GAME, c, (rr) => { room = rr; render(); });
+  be.watchPlayers(GAME, c, (ps) => {
+    players = ps || {}; me = players[be.uid] || null;
+    if (!me && room) { $("#screen").innerHTML = `<div class="center"><div class="big-emoji">🚪</div><h2>선생님이 내보냈어요</h2></div>`; return; }
+    render();
+  });
+}
+
+const wealth = () => (me && typeof me.wealth === "number" ? me.wealth : START_MONEY);
+const left = () => (room && room.endsAt ? Math.ceil((room.endsAt - Date.now()) / 1000) : null);
+const hide = () => !!(room.settings && room.settings.hideNames) && room.phase !== "end";
+
+function render() {
+  if (!room || !me) return;
+  $("#meCash").textContent = won(wealth());
+  const key = [room.phase, room.seq, room.yearIdx, me.allocSeq, me.wealth, room.settings && room.settings.hideNames].join("|");
+  if (key === lastKey && room.phase !== "invest") return;
+  lastKey = key;
+  const s = $("#screen"), yi = room.yearIdx, Y = YEARS[yi];
+
+  if (room.phase === "lobby") {
+    s.innerHTML = `<div class="center" style="padding:20px 0"><div class="big-emoji">⏳</div><h2>2016년 12월 31일</h2><p>시간 여행 준비 완료!<br>내 돈 <b>${won(START_MONEY)}</b>으로 투자를 시작해요.</p><p class="muted">선생님이 시작할 때까지 기다려요.</p></div>`;
+  } else if (room.phase === "invest") {
+    if (draftSeq !== room.seq) {
+      draftSeq = room.seq;
+      draft = normalize(me.allocSeq === room.seq && me.alloc ? me.alloc : me.lastAlloc || { dep: 100 });
+      s.dataset.built = "";
+    }
+    renderInvest(Y);
+  } else if (room.phase === "reveal") {
+    const L = me.last && me.last.seq === room.seq ? me.last : null;
+    if (!L) { s.innerHTML = `<p class="center muted">결과를 계산하고 있어요…</p>`; return; }
+    const ch = (L.after / L.before - 1) * 100;
+    const g = grow(L.before, L.alloc, yi);
+    const rows = Object.values(players).map((p) => (typeof p.wealth === "number" ? p.wealth : START_MONEY)).sort((a, b) => b - a);
+    s.innerHTML = `<div class="center"><div class="muted">${Y}년 결과</div>
+        <div class="bigdelta ${ch >= 0 ? "pos" : "neg"}">${signed(L.after - L.before)}</div>
+        <div><b>${pct(ch)}</b> · 지금 재산 <b>${won(L.after)}</b> · ${rows.length}명 중 <b>${rows.indexOf(L.after) + 1}등</b></div></div>
+      <h3 style="margin-top:16px">내 투자 결과</h3>
+      <div class="brk">${ASSETS.filter((a) => L.alloc[a.id] > 0).map((a) => `<div><span>${a.icon} ${esc(assetName(a, hide()))} ${L.alloc[a.id]}%</span><span class="${RETURNS[a.id][yi] >= 0 ? "pos" : "neg"}">${pct(RETURNS[a.id][yi])} → ${won(g.parts[a.id].got)}</span></div>`).join("")}</div>
+      <div class="explain" style="margin-top:12px;background:#f3f5fb;border-radius:12px;padding:12px">📅 ${RECAP[Y].what}</div>`;
+  } else if (room.phase === "end") {
+    const rows = Object.values(players).map((p) => (typeof p.wealth === "number" ? p.wealth : START_MONEY)).sort((a, b) => b - a);
+    const ch = (wealth() / START_MONEY - 1) * 100;
+    s.innerHTML = `<div class="center" style="padding:16px 0"><div class="big-emoji">🏁</div><h2>시간 여행 끝!</h2>
+      <p>100만 원이</p><div class="bigdelta">${won(wealth())}</div><p class="${ch >= 0 ? "pos" : "neg"}"><b>${pct(ch)}</b></p>
+      <p>${rows.length}명 중 <b>${rows.indexOf(wealth()) + 1}등</b></p></div>
+      ${room.settings && room.settings.hideNames ? `<div class="explain" style="background:#fff7e6;border-radius:12px;padding:12px">🔓 ${ASSETS.filter((a) => a.hidden !== a.name).map((a) => `${a.hidden} = <b>${a.name}</b>`).join(" · ")}</div>` : ""}`;
+  }
+  tick();
+}
+
+function renderInvest(Y) {
+  const s = $("#screen");
+  const submitted = me.allocSeq === room.seq;
+  const over = left() !== null && left() <= 0;
+  if (!s.dataset.built) {
+    s.dataset.built = "1";
+    s.innerHTML = `
+      <div class="row"><h2 class="grow" style="margin:0">${Y}년 투자</h2><span class="timer" data-timer style="font-size:1.4rem"></span></div>
+      <div class="news" style="margin:10px 0">${NEWS[Y].map((n) => `<div>${n}</div>`).join("")}</div>
+      <div class="mix" id="mix"></div>
+      <div class="muted" style="font-size:.85rem">10%씩 나눠요. 남는 돈은 자동으로 <b>예금</b>에 들어가요.</div>
+      <div class="presets">
+        <button data-pre="dep">🏦 전부 예금</button>
+        <button data-pre="even">🧺 골고루 나누기</button>
+        <button data-pre="keep">↩︎ 작년처럼</button>
+      </div>
+      <div id="assets"></div>
+      <div class="sticky-go"><button class="btn big accent" id="goBtn" style="width:100%"></button></div>`;
+    s.querySelectorAll("[data-pre]").forEach((b) => (b.onclick = () => {
+      if (b.dataset.pre === "dep") draft = normalize({ dep: 100 });
+      if (b.dataset.pre === "even") draft = normalize({ bond: 10, fund: 30, ss: 10, hy: 10, nv: 10, kk: 10, ka: 10 });
+      if (b.dataset.pre === "keep") draft = normalize(me.lastAlloc || { dep: 100 });
+      paint();
+    }));
+    $("#goBtn").onclick = () => {
+      if (left() !== null && left() <= 0) return toast("투자 시간이 끝났어요");
+      be.updatePlayer(GAME, code, be.uid, { alloc: draft, allocSeq: room.seq });
+      toast("투자 완료! 시간 안에는 바꿀 수 있어요");
+    };
+  }
+  paint();
+  function paint() {
+    const W = wealth(), H = hide();
+    $("#mix").innerHTML = ASSETS.map((a) => `<span style="width:${draft[a.id]}%;background:${COLORS[a.id]}" title="${a.name}"></span>`).join("");
+    $("#assets").innerHTML = ASSETS.map((a) => `
+      <div class="asset">
+        <div><div class="nm">${a.icon} ${esc(assetName(a, H))}</div><div class="ds">${esc(a.desc)}</div><div class="tg">${a.tags.map((t) => `<span>${t}</span>`).join("")}</div></div>
+        <div class="stepper">
+          ${a.id === "dep" ? "" : `<button data-d="-10" data-id="${a.id}" ${over ? "disabled" : ""}>−</button>`}
+          <div class="v">${draft[a.id]}%<small>${Math.round((W * draft[a.id]) / 100 / 10000)}만 원</small></div>
+          ${a.id === "dep" ? "" : `<button data-d="10" data-id="${a.id}" ${over ? "disabled" : ""}>+</button>`}
+        </div>
+      </div>`).join("");
+    $("#assets").querySelectorAll("[data-d]").forEach((b) => (b.onclick = () => {
+      const id = b.dataset.id, d = +b.dataset.d;
+      const next = { ...draft, [id]: Math.max(0, draft[id] + d) };
+      if (d > 0 && draft.dep <= 0) return toast("예금에 남은 돈이 없어요. 다른 곳을 줄여 보세요");
+      draft = normalize(next);
+      paint();
+    }));
+    const same = me.allocSeq === room.seq && me.alloc && ASSETS.every((a) => (me.alloc[a.id] || 0) === draft[a.id]);
+    $("#goBtn").textContent = over ? "시간 끝! 선생님 화면을 봐요" : same ? "✅ 투자 완료 (바꾸면 다시 눌러요)" : `이대로 투자하기 (${countAssets(draft)}곳에 나눔)`;
+    $("#goBtn").disabled = over;
+    $("#goBtn").className = "btn big " + (same ? "teal" : "accent");
+    $("#goBtn").style.width = "100%";
+  }
+}
+
+function tick() {
+  const s = left();
+  document.querySelectorAll("[data-timer]").forEach((el) => { el.textContent = s === null ? "" : s > 0 ? `⏱ ${s}초` : "시간 끝!"; el.classList.toggle("low", s !== null && s <= 10); });
+  if (room && room.phase === "invest" && s !== null && s <= 0 && $("#goBtn") && !$("#goBtn").disabled) renderInvest(YEARS[room.yearIdx]);
+}
+setInterval(tick, 500);
+</script>
+</body>
+</html>

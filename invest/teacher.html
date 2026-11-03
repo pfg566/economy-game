@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>금융 투자 타임머신 · 선생님</title>
+<link rel="stylesheet" href="../shared/common.css">
+<style>
+  :root { --accent: #2f5bd3; }
+  .layout { display: grid; grid-template-columns: 1fr 300px; gap: 18px; align-items: start; }
+  .stage { min-height: 540px; display: flex; flex-direction: column; gap: 18px; }
+  .year { font-size: 4rem; font-weight: 900; letter-spacing: -.04em; line-height: 1; }
+  .year small { font-size: 1.2rem; color: var(--muted); font-weight: 700; margin-left: 8px; letter-spacing: 0; }
+  .news { display: flex; flex-direction: column; gap: 10px; }
+  .news div { font-size: 1.45rem; font-weight: 600; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; }
+  .bigstat { font-size: 3rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+  .ret .bar-row { grid-template-columns: 190px 1fr 120px; font-size: 1.15rem; }
+  .ret .bar-track { height: 26px; background: transparent; }
+  .ret .zero { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: #cfc5ae; }
+  .ret .bar-fill { background: var(--good); }
+  .ret .bar-fill.neg { background: var(--bad); }
+  .two { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; }
+  .lb { display: flex; flex-direction: column; gap: 4px; }
+  .lb div { display: grid; grid-template-columns: 34px 1fr auto auto; gap: 8px; padding: 6px 10px; border-radius: 10px; background: #fff; border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px; }
+  .plist { max-height: 380px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+  .pitem { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: #f3f5fb; font-size: .95rem; }
+  .pitem .dot { width: 10px; height: 10px; border-radius: 50%; background: #c9cfdd; flex: none; }
+  .pitem .dot.on { background: var(--good); }
+  .pitem .x { margin-left: auto; border: 0; background: none; color: var(--muted); }
+  .join b { color: var(--accent-2); }
+  .settings label { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+  details summary { cursor: pointer; font-weight: 700; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .95rem; }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+  @media (max-width: 960px) { .layout, .two { grid-template-columns: 1fr; } .side { position: static; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">⏳ 금융 투자 타임머신</div>
+    <div id="codePill" class="code-pill hidden">수업 코드<b id="codeText"></b></div>
+    <div class="grow"></div><span id="mode"></span>
+  </div>
+
+  <div id="loginView" class="card" style="max-width:420px;margin:60px auto">
+    <h2>선생님 화면</h2>
+    <p class="muted">비밀번호는 shared/firebase-config.js 에서 바꿀 수 있어요.</p>
+    <div class="field"><input id="pw" type="password" placeholder="비밀번호"></div>
+    <div style="height:12px"></div>
+    <button class="btn big" id="pwBtn" style="width:100%">들어가기</button>
+  </div>
+
+  <div id="setupView" class="card hidden" style="max-width:520px;margin:40px auto">
+    <h2>수업 시작하기</h2>
+    <p class="muted">2016년 말로 시간 여행! 학생마다 100만 원을 들고 2017년부터 2024년까지 한 해씩 투자해요.</p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn big accent" id="newRoomBtn">새 수업 코드 만들기</button>
+      <button class="btn big ghost hidden" id="resumeBtn"></button>
+    </div>
+  </div>
+
+  <div id="gameView" class="layout hidden">
+    <div class="card stage" id="stage"></div>
+    <div class="side">
+      <div class="card">
+        <div class="row"><b>다음 진행</b><div class="grow"></div><span id="timerSide" class="muted"></span></div>
+        <div style="height:10px"></div>
+        <button class="btn big accent" id="nextBtn" style="width:100%"></button>
+        <div class="row" style="margin-top:8px">
+          <button class="btn ghost grow" id="endBtn">최종 결과</button>
+          <button class="btn ghost grow" id="restartBtn">처음부터</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row"><b>참가 학생</b><span class="chip" id="pcount">0명</span></div>
+        <div class="plist" id="plist" style="margin-top:8px"></div>
+      </div>
+      <div class="card settings">
+        <details>
+          <summary>⚙️ 설정</summary>
+          <label><input type="checkbox" id="hideNames"> 회사 이름 숨기기 (A~E회사, 마지막에 공개)</label>
+          <label>투자 시간
+            <select id="investSec"><option value="60">60초</option><option value="90">90초</option><option value="120">120초</option><option value="180">180초</option></select></label>
+          <label>마지막 해
+            <select id="lastYear"></select></label>
+          <div class="row" style="margin-top:8px"><button class="btn ghost" id="newCodeBtn">새 코드</button></div>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { createBackend, $, esc, won, newCode, modeBadge } from "../shared/backend.js";
+import { TEACHER_PASSWORD } from "../shared/firebase-config.js";
+import { YEARS, ASSETS, RETURNS, NEWS, RECAP, START_MONEY } from "./data.js";
+import { grow, normalize, priceAt, onlyOne, assetName, countAssets } from "./calc.js";
+
+const GAME = "invest";
+const COLORS = { dep: "#8a94a6", bond: "#5b7db8", fund: "#e8a33a", ss: "#2f5bd3", hy: "#1f8a83", nv: "#3fae5a", kk: "#d9a400", ka: "#c2412d" };
+let be, code, room = null, players = {};
+
+function toast(m) { const t = document.createElement("div"); t.className = "toast"; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2200); }
+const pct = (x) => (x > 0 ? "+" : "") + x.toFixed(1) + "%";
+
+$("#pwBtn").onclick = login;
+$("#pw").onkeydown = (e) => e.key === "Enter" && login();
+if (sessionStorage.getItem("econ-teacher") === "ok") login(true);
+
+async function login(skip) {
+  if (!skip && $("#pw").value !== TEACHER_PASSWORD) return toast("비밀번호가 달라요");
+  sessionStorage.setItem("econ-teacher", "ok");
+  $("#loginView").classList.add("hidden");
+  try { be = await createBackend(); } catch (e) { alert("서버 연결 실패: " + e.message); return; }
+  $("#mode").innerHTML = modeBadge(be);
+  const last = localStorage.getItem("econ-invest-code");
+  if (last && (await be.getRoom(GAME, last))) {
+    $("#resumeBtn").textContent = `이어서 하기 (코드 ${last})`;
+    $("#resumeBtn").classList.remove("hidden");
+    $("#resumeBtn").onclick = () => openRoom(last);
+  }
+  $("#setupView").classList.remove("hidden");
+}
+
+$("#newRoomBtn").onclick = createRoom;
+$("#newCodeBtn").onclick = () => confirm("새 수업 코드를 만들까요?") && createRoom();
+
+async function createRoom() {
+  let c;
+  for (let i = 0; i < 20; i++) { c = newCode(); if (!(await be.getRoom(GAME, c))) break; }
+  await be.setRoom(GAME, c, {
+    game: GAME, host: be.uid, createdAt: Date.now(),
+    phase: "lobby", yearIdx: 0, seq: 0, endsAt: 0,
+    settings: { hideNames: false, investSec: 90, lastIdx: YEARS.length - 1 },
+    result: null,
+  });
+  openRoom(c);
+}
+
+function openRoom(c) {
+  code = c; localStorage.setItem("econ-invest-code", c);
+  $("#setupView").classList.add("hidden"); $("#gameView").classList.remove("hidden");
+  $("#codePill").classList.remove("hidden"); $("#codeText").textContent = c;
+  $("#lastYear").innerHTML = YEARS.map((y, i) => `<option value="${i}">${y}년</option>`).join("");
+  ["hideNames", "investSec", "lastYear"].forEach((id) => ($("#" + id).onchange = saveSettings));
+  be.watchRoom(GAME, c, (r) => { room = r; render(); });
+  be.watchPlayers(GAME, c, (p) => { players = p || {}; render(); });
+}
+
+const patch = (p) => be.updateRoom(GAME, code, p);
+const S = () => room.settings || {};
+const wealthOf = (p) => (typeof p.wealth === "number" ? p.wealth : START_MONEY);
+
+function saveSettings() {
+  patch({ settings: { hideNames: $("#hideNames").checked, investSec: +$("#investSec").value, lastIdx: +$("#lastYear").value } });
+}
+
+function nextLabel() {
+  if (room.phase === "lobby") return `▶ ${YEARS[0]}년 투자 시작`;
+  if (room.phase === "invest") return `▶ ${YEARS[room.yearIdx]}년 결과 공개`;
+  if (room.phase === "reveal") return room.yearIdx < S().lastIdx ? `▶ ${YEARS[room.yearIdx + 1]}년 투자하기` : "▶ 최종 결과";
+  return "게임 끝";
+}
+
+$("#nextBtn").onclick = async () => {
+  $("#nextBtn").disabled = true;
+  try {
+    if (room.phase === "lobby") await startYear(0);
+    else if (room.phase === "invest") await reveal();
+    else if (room.phase === "reveal") room.yearIdx < S().lastIdx ? await startYear(room.yearIdx + 1) : await patch({ phase: "end" });
+  } finally { $("#nextBtn").disabled = false; }
+};
+$("#endBtn").onclick = () => confirm("최종 결과 화면으로 갈까요?") && patch({ phase: "end" });
+$("#restartBtn").onclick = async () => {
+  if (!confirm("모든 학생의 돈을 100만 원으로 되돌리고 2017년부터 다시 할까요?")) return;
+  const u = {};
+  for (const id in players) u[id] = { wealth: START_MONEY, history: [START_MONEY], lastAlloc: { dep: 100 }, last: null, allocSeq: -1 };
+  await be.updatePlayers(GAME, code, u);
+  await patch({ phase: "lobby", yearIdx: 0, result: null, endsAt: 0 });
+};
+
+function startYear(i) {
+  return patch({ phase: "invest", yearIdx: i, seq: (room.seq || 0) + 1, endsAt: Date.now() + S().investSec * 1000, result: null });
+}
+
+async function reveal() {
+  if (room.result && room.result.seq === room.seq) return patch({ phase: "reveal", endsAt: 0 });
+  const yi = room.yearIdx, u = {}, rows = [];
+  for (const id in players) {
+    const p = players[id];
+    const alloc = p.allocSeq === room.seq && p.alloc ? p.alloc : p.lastAlloc || { dep: 100 };
+    const before = wealthOf(p);
+    const g = grow(before, alloc, yi);
+    const hist = Array.isArray(p.history) && p.history.length ? p.history.slice(0, yi + 1) : [START_MONEY];
+    while (hist.length < yi + 1) hist.push(before);
+    hist[yi + 1] = g.after;
+    u[id] = { wealth: g.after, lastAlloc: g.alloc, history: hist, last: { seq: room.seq, yearIdx: yi, before, after: g.after, alloc: g.alloc } };
+    rows.push({ name: p.name || "?", before, after: g.after, n: countAssets(g.alloc) });
+  }
+  await be.updatePlayers(GAME, code, u);
+  rows.sort((a, b) => b.after - a.after);
+  await patch({ phase: "reveal", endsAt: 0, result: { seq: room.seq, yearIdx: yi, rows } });
+}
+
+function studentURL() { const u = new URL("student.html", location.href); if (be.mode === "demo") u.searchParams.set("demo", "1"); return u.href; }
+const remain = () => (room && room.endsAt ? Math.max(0, Math.ceil((room.endsAt - Date.now()) / 1000)) : null);
+
+function render() {
+  if (!room) return;
+  const s = S();
+  $("#hideNames").checked = !!s.hideNames; $("#investSec").value = s.investSec; $("#lastYear").value = s.lastIdx;
+  const ids = Object.keys(players);
+  $("#pcount").textContent = ids.length + "명";
+  $("#plist").innerHTML = ids.sort((a, b) => (players[a].name || "").localeCompare(players[b].name || "", "ko")).map((id) => {
+    const p = players[id];
+    const on = room.phase === "invest" ? p.allocSeq === room.seq : true;
+    return `<div class="pitem"><span class="dot ${on ? "on" : ""}"></span>${esc(p.name)}<span class="muted" style="margin-left:6px">${won(wealthOf(p))}</span><button class="x" data-kick="${id}">✕</button></div>`;
+  }).join("") || `<div class="muted">아직 아무도 없어요</div>`;
+  document.querySelectorAll("[data-kick]").forEach((b) => (b.onclick = () => confirm(`${players[b.dataset.kick].name} 학생을 내보낼까요?`) && be.deletePlayer(GAME, code, b.dataset.kick)));
+  $("#nextBtn").textContent = nextLabel();
+  $("#nextBtn").disabled = room.phase === "end";
+
+  const st = $("#stage"), yi = room.yearIdx, Y = YEARS[yi], hide = !!s.hideNames;
+  if (room.phase === "lobby") {
+    st.innerHTML = `
+      <h1>⏳ 2016년 12월 31일로 시간 여행!</h1>
+      <div class="join" style="font-size:1.15rem">① 주소: <b>${esc(studentURL())}</b></div>
+      <div class="join" style="font-size:1.15rem">② 수업 코드 <b style="font-size:2.6rem;letter-spacing:.15em;color:var(--accent)">${code}</b> 와 이름 입력</div>
+      <div class="concept">모두 <b>100만 원</b>을 들고 시작해요. 해마다 뉴스를 보고 <b>예금·채권·펀드·주식</b>에 나누어 투자해요. 1년이 지나면 <b>실제로 있었던 일</b>대로 돈이 늘거나 줄어요!</div>
+      <div class="chips">${ASSETS.map((a) => `<span class="chip">${a.icon} ${esc(assetName(a, hide))} · ${esc(a.desc)}</span>`).join("")}</div>
+      <div><b>들어온 학생 ${ids.length}명</b></div>
+      <div class="chips">${ids.map((id) => `<span class="chip">${esc(players[id].name)}</span>`).join("")}</div>`;
+  } else if (room.phase === "invest") {
+    const done = ids.filter((id) => players[id].allocSeq === room.seq).length;
+    st.innerHTML = `
+      <div class="row"><div class="year">${Y}년<small>${yi + 1} / ${s.lastIdx + 1}년째</small></div><div class="grow"></div><span class="timer" data-timer></span></div>
+      <h2>📰 올해의 뉴스</h2>
+      <div class="news">${NEWS[Y].map((n) => `<div>${n}</div>`).join("")}</div>
+      <div class="row"><div class="bigstat">${done} / ${ids.length}명</div><div class="muted">투자 완료 (안 고르면 작년과 똑같이 투자해요)</div></div>`;
+  } else if (room.phase === "reveal") {
+    const res = room.result || { rows: [] };
+    const rets = ASSETS.map((a) => ({ a, r: RETURNS[a.id][yi] })).sort((x, y) => y.r - x.r);
+    const maxAbs = Math.max(10, ...rets.map((x) => Math.abs(x.r)));
+    const avg = res.rows.length ? res.rows.reduce((t, x) => t + (x.after / x.before - 1) * 100, 0) / res.rows.length : 0;
+    st.innerHTML = `
+      <div class="row"><div class="year">${Y}년 결과</div><div class="grow"></div><div class="muted">반 평균 수익률 <b class="${avg >= 0 ? "pos" : "neg"}" style="font-size:1.6rem">${pct(avg)}</b></div></div>
+      <div class="concept">📅 <b>그해 실제로는…</b> ${RECAP[Y].what}</div>
+      <div class="two">
+        <div class="bars ret">${rets.map(({ a, r }) => {
+          const w = (Math.abs(r) / maxAbs) * 50;
+          return `<div class="bar-row"><div class="name">${a.icon} ${esc(assetName(a, hide))}</div><div class="bar-track"><span class="zero"></span><div class="bar-fill ${r < 0 ? "neg" : ""}" style="left:${r < 0 ? 50 - w : 50}%;width:${w}%"></div></div><div class="val ${r < 0 ? "neg" : "pos"}">${pct(r)}</div></div>`;
+        }).join("")}</div>
+        <div><b>💰 재산 순위</b><div class="lb" style="margin-top:8px">${res.rows.slice(0, 10).map((x, i) => {
+          const c = (x.after / x.before - 1) * 100;
+          return `<div><span>${i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</span><span>${esc(x.name)}</span><b>${won(x.after)}</b><span class="${c >= 0 ? "pos" : "neg"}">${pct(c)}</span></div>`;
+        }).join("")}</div></div>
+      </div>
+      <div class="concept">📖 ${RECAP[Y].concept}</div>`;
+  } else if (room.phase === "end") {
+    const last = Math.min(s.lastIdx, yi);
+    const rows = ids.map((id) => ({ name: players[id].name, w: wealthOf(players[id]), h: players[id].history || [] })).sort((a, b) => b.w - a.w);
+    const avg = rows.length ? rows.reduce((t, x) => t + x.w, 0) / rows.length : START_MONEY;
+    const bench = ["dep", "fund", "kk", "ka"].map((id) => ({ a: ASSETS.find((x) => x.id === id), w: onlyOne(id, START_MONEY, last) }));
+    st.innerHTML = `
+      <h1>🏁 ${YEARS[0]}~${YEARS[last]}년 최종 결과</h1>
+      ${hide ? `<div class="concept">🔓 <b>회사 이름 공개!</b> ${ASSETS.filter((a) => a.hidden !== a.name).map((a) => `${a.hidden} = <b>${a.name}</b>`).join(" · ")}</div>` : ""}
+      <div class="two">
+        <div><b>📈 가격 변화 (2016년 말 = 10,000원)</b>${chart(last)}</div>
+        <div>
+          <b>🏆 최종 순위</b>
+          <div class="lb" style="margin-top:8px">${rows.slice(0, 10).map((x, i) => `<div><span>${i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</span><span>${esc(x.name)}</span><b>${won(x.w)}</b><span></span></div>`).join("")}</div>
+          <p class="muted">반 평균 <b>${won(avg)}</b></p>
+          <b>🤔 처음부터 한 곳에만 넣었다면?</b>
+          <div class="lb" style="margin-top:8px">${bench.map((b) => `<div><span>${b.a.icon}</span><span>${esc(b.a.name)}만</span><b>${won(b.w)}</b><span></span></div>`).join("")}</div>
+        </div>
+      </div>
+      <div class="concept">📖 <b>자산 관리의 원칙</b>: 수익성·안전성·유동성을 함께 생각하고, 달걀을 한 바구니에 담지 않는 <b>분산 투자</b>로 위험을 줄여요. 결과만 보고 판단하기보다 <b>정보를 모아 스스로 결정</b>하는 습관이 중요해요.</div>`;
+  }
+  tick();
+}
+
+function chart(last) {
+  const W = 520, H = 300, P = { l: 52, r: 12, t: 12, b: 28 };
+  const n = last + 2;
+  const series = ASSETS.map((a) => ({ a, v: [10000, ...YEARS.slice(0, last + 1).map((_, i) => priceAt(a.id, i))] }));
+  const max = Math.max(...series.flatMap((s) => s.v)) * 1.05;
+  const x = (i) => P.l + (i * (W - P.l - P.r)) / (n - 1);
+  const y = (v) => H - P.b - (v / max) * (H - P.t - P.b);
+  const ticks = [0, 10000, 20000, 40000, 60000, 80000].filter((t) => t <= max);
+  const hide = !!S().hideNames && room.phase !== "end";
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;margin-top:8px">
+    ${ticks.map((t) => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" stroke="#e4dccb"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="#6b7280">${(t / 10000).toFixed(0)}만</text>`).join("")}
+    ${[2016, ...YEARS.slice(0, last + 1)].map((yy, i) => `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#6b7280">${String(yy).slice(2)}</text>`).join("")}
+    ${series.map((s) => `<polyline fill="none" stroke="${COLORS[s.a.id]}" stroke-width="${s.a.kind === "risk" ? 2.5 : 3.5}" stroke-linejoin="round" points="${s.v.map((v, i) => `${x(i)},${y(v)}`).join(" ")}"/>`).join("")}
+  </svg>
+  <div class="legend">${series.map((s) => `<span style="--c:${COLORS[s.a.id]}">${esc(assetName(s.a, hide))} ${(s.v[s.v.length - 1]).toLocaleString()}원</span>`).join("")}</div>`;
+}
+
+function tick() {
+  const s = remain();
+  document.querySelectorAll("[data-timer]").forEach((el) => { el.textContent = s === null ? "" : s > 0 ? `${s}초` : "시간 끝!"; el.classList.toggle("low", s !== null && s <= 10); });
+  $("#timerSide").textContent = s === null ? "" : s > 0 ? `남은 시간 ${s}초` : "시간 끝";
+}
+setInterval(tick, 250);
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>경제 수업 게임</title>
+<link rel="stylesheet" href="shared/common.css">
+<style>
+  .games { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+  .game h2 { font-size: 1.6rem; }
+  .game .big-emoji { font-size: 3rem; }
+  .game .row { margin-top: 14px; }
+  .game a { text-decoration: none; }
+  @media (max-width: 720px) { .games { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand" style="font-size:1.8rem">📚 시장경제와 지속가능발전 · 수업 게임</div>
+  <p class="muted">학생은 <b>학생으로 참여</b>를, 선생님은 교실 큰 화면에서 <b>선생님 화면</b>을 열어요.</p>
+  <div class="games">
+    <div class="card game">
+      <div class="big-emoji">🧪</div>
+      <h2>경제 실험실</h2>
+      <p>문제를 풀어 생산하고, 라운드마다 바뀌는 경제 규칙(계획경제·시장경제·혼합경제·공공재·담합·외부 효과)을 몸으로 겪어 봐요.</p>
+      <div class="row">
+        <a class="btn big accent" href="lab/student.html" data-keep>학생으로 참여</a>
+        <a class="btn big ghost" href="lab/teacher.html" data-keep>선생님 화면</a>
+      </div>
+    </div>
+    <div class="card game">
+      <div class="big-emoji">⏳</div>
+      <h2>금융 투자 타임머신</h2>
+      <p>2016년 말로 시간 여행! 100만 원으로 예금·채권·펀드·실제 회사 주식에 투자하고, 2017~2024년에 실제로 일어난 일대로 결과를 확인해요.</p>
+      <div class="row">
+        <a class="btn big" style="background:#2f5bd3" href="invest/student.html" data-keep>학생으로 참여</a>
+        <a class="btn big ghost" href="invest/teacher.html" data-keep>선생님 화면</a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  // ?demo=1 이 붙어 있으면 링크에도 붙여 줌
+  if (location.search.includes("demo=1")) document.querySelectorAll("[data-keep]").forEach((a) => (a.href += "?demo=1"));
+</script>
+</body>
+</html>
