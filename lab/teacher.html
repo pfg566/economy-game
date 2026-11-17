@@ -54,6 +54,8 @@
   </div>
 
   <!-- 방 만들기 -->
+  <div id="statusView" class="card hidden" style="max-width:520px;margin:40px auto"></div>
+
   <div id="setupView" class="card hidden" style="max-width:520px;margin:40px auto">
     <h2>수업 시작하기</h2>
     <p class="muted">새 수업 코드를 만들면 학생들이 그 코드로 들어와요.</p>
@@ -106,7 +108,7 @@
 </div>
 
 <script type="module">
-import { createBackend, $, esc, won, signed, newCode, modeBadge } from "../shared/backend.js";
+import { createBackend, $, esc, won, signed, newCode, modeBadge, explainError, withTimeout, showError } from "../shared/backend.js";
 import { TEACHER_PASSWORD } from "../shared/firebase-config.js";
 import { ROUNDS, TAX_OPTIONS, STEP_NAMES, START_CASH, computeRound, tallyTax, producedOf } from "./rounds.js";
 import { QUESTION_SETS } from "./questions.js";
@@ -128,13 +130,25 @@ async function login(skip) {
   if (!skip && $("#pw").value !== TEACHER_PASSWORD) return toast("비밀번호가 달라요");
   sessionStorage.setItem("econ-teacher", "ok");
   $("#loginView").classList.add("hidden");
-  try { be = await createBackend(); }
-  catch (e) { console.error(e); alert("서버 연결 실패: Firebase 설정과 익명 로그인 사용 설정을 확인해 주세요.\n" + e.message); return; }
-  $("#mode").innerHTML = modeBadge(be);
-  const last = localStorage.getItem("econ-lab-code");
-  if (last) {
-    const r = await be.getRoom(GAME, last);
-    if (r) { $("#resumeBtn").textContent = `이어서 하기 (코드 ${last})`; $("#resumeBtn").classList.remove("hidden"); $("#resumeBtn").onclick = () => openRoom(last); }
+  const sv = $("#statusView");
+  sv.classList.remove("hidden");
+  sv.innerHTML = `<h2>⏳ 서버에 연결하는 중…</h2><p class="muted">10초 넘게 이 화면이면 잠시 뒤 원인이 표시돼요.</p>`;
+  let last = null, lastOk = false;
+  try {
+    be = await createBackend();
+    $("#mode").innerHTML = modeBadge(be);
+    last = localStorage.getItem("econ-lab-code");
+    if (last) lastOk = !!(await withTimeout(be.getRoom(GAME, last)));
+  } catch (e) {
+    console.error(e);
+    sv.innerHTML = `<h2>⚠️ 연결하지 못했어요</h2><p style="font-size:1.1rem;font-weight:700;color:var(--bad)">${esc(explainError(e))}</p><p class="muted">고친 뒤 아래 버튼을 눌러 주세요.</p><button class="btn big" onclick="location.reload()">다시 시도</button>`;
+    return;
+  }
+  sv.classList.add("hidden");
+  if (lastOk) {
+    $("#resumeBtn").textContent = `이어서 하기 (코드 ${last})`;
+    $("#resumeBtn").classList.remove("hidden");
+    $("#resumeBtn").onclick = () => openRoom(last);
   }
   $("#setupView").classList.remove("hidden");
 }
@@ -143,6 +157,13 @@ $("#newRoomBtn").onclick = createRoom;
 $("#newCodeBtn").onclick = () => { if (confirm("새 수업 코드를 만들까요? 학생들은 새 코드로 다시 들어와야 해요.")) createRoom(); };
 
 async function createRoom() {
+  const btn = $("#newRoomBtn");
+  btn.disabled = true; const label = btn.textContent; btn.textContent = "만드는 중…";
+  try { await withTimeout(_createRoom(), 15000); }
+  catch (e) { showError(e); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+async function _createRoom() {
   let c;
   for (let i = 0; i < 20; i++) { c = newCode(); if (!(await be.getRoom(GAME, c))) break; }
   await be.setRoom(GAME, c, {

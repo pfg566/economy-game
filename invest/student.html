@@ -49,7 +49,7 @@
 </div>
 
 <script type="module">
-import { createBackend, $, esc, won, signed, modeBadge } from "../shared/backend.js";
+import { createBackend, $, esc, won, signed, modeBadge, explainError, withTimeout } from "../shared/backend.js";
 import { YEARS, ASSETS, RETURNS, NEWS, RECAP, START_MONEY } from "./data.js";
 import { normalize, grow, assetName, countAssets } from "./calc.js";
 
@@ -60,8 +60,9 @@ let be, code, room = null, me = null, draft = null, draftSeq = -1, lastKey = "";
 function toast(m) { const t = document.createElement("div"); t.className = "toast"; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 1800); }
 const pct = (x) => (x > 0 ? "+" : "") + x.toFixed(1) + "%";
 
+const bePromise = createBackend();
 (async () => {
-  try { be = await createBackend(); } catch (e) { $("#joinMsg").textContent = "서버에 연결하지 못했어요."; return; }
+  try { be = await bePromise; } catch (e) { console.error(e); $("#joinMsg").innerHTML = `<b style="color:var(--bad)">⚠️ ${esc(explainError(e))}</b>`; return; }
   $("#mode").innerHTML = modeBadge(be);
   const saved = JSON.parse(localStorage.getItem("econ-invest-me") || "null");
   if (saved) { $("#codeIn").value = saved.code; $("#nameIn").value = saved.name; }
@@ -75,13 +76,26 @@ async function join() {
   const c = $("#codeIn").value.trim(), name = $("#nameIn").value.trim();
   if (!/^\d{4}$/.test(c)) return ($("#joinMsg").textContent = "수업 코드 4자리를 확인해 주세요.");
   if (!name) return ($("#joinMsg").textContent = "이름을 입력해 주세요.");
-  const r = await be.getRoom(GAME, c);
-  if (!r) return ($("#joinMsg").textContent = "그런 수업 코드가 없어요.");
-  code = c;
-  localStorage.setItem("econ-invest-me", JSON.stringify({ code: c, name }));
-  const existing = await new Promise((res) => { const u = be.watchPlayer(GAME, c, be.uid, (p) => { res(p); setTimeout(() => u && u(), 0); }); });
-  const init = existing ? { name } : { name, wealth: START_MONEY, history: [START_MONEY], lastAlloc: { dep: 100 }, joinedAt: Date.now() };
-  await be.updatePlayer(GAME, c, be.uid, init);
+  const btn = $("#joinBtn");
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = "연결 중…";
+  $("#joinMsg").textContent = "";
+  try {
+    if (!be) be = await bePromise;
+    const r = await withTimeout(be.getRoom(GAME, c));
+    if (!r) { $("#joinMsg").textContent = "그런 수업 코드가 없어요. 선생님 화면의 코드와 게임 종류(투자 타임머신)를 확인해 주세요."; return; }
+    code = c;
+    localStorage.setItem("econ-invest-me", JSON.stringify({ code: c, name }));
+    const existing = await withTimeout(be.getPlayer(GAME, c, be.uid));
+    const init = existing ? { name } : { name, wealth: START_MONEY, history: [START_MONEY], lastAlloc: { dep: 100 }, joinedAt: Date.now() };
+    await withTimeout(be.updatePlayer(GAME, c, be.uid, init));
+  } catch (e) {
+    console.error(e);
+    $("#joinMsg").innerHTML = `<b style="color:var(--bad)">⚠️ ${esc(explainError(e))}</b>`;
+    return;
+  } finally {
+    btn.disabled = false; btn.textContent = "들어가기";
+  }
   $("#joinView").classList.add("hidden"); $("#gameView").classList.remove("hidden");
   $("#meName").textContent = name;
   be.watchRoom(GAME, c, (rr) => { room = rr; render(); });

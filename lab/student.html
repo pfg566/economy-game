@@ -40,7 +40,7 @@
 </div>
 
 <script type="module">
-import { createBackend, $, esc, won, signed, shuffle, modeBadge } from "../shared/backend.js";
+import { createBackend, $, esc, won, signed, shuffle, modeBadge, explainError, withTimeout } from "../shared/backend.js";
 import { ROUNDS, TAX_OPTIONS, START_CASH, PER_CORRECT } from "./rounds.js";
 import { QUESTIONS } from "./questions.js";
 
@@ -50,9 +50,10 @@ let deck = [], qi = 0, local = { seq: -1, produced: 0, correct: 0, tried: 0 }, l
 
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
 
+const bePromise = createBackend();
 (async () => {
-  try { be = await createBackend(); }
-  catch (e) { $("#joinMsg").textContent = "서버에 연결하지 못했어요. 선생님께 알려 주세요."; console.error(e); return; }
+  try { be = await bePromise; }
+  catch (e) { console.error(e); $("#joinMsg").innerHTML = `<b style="color:var(--bad)">⚠️ ${esc(explainError(e))}</b>`; return; }
   $("#mode").innerHTML = modeBadge(be);
   const saved = JSON.parse(localStorage.getItem("econ-lab-me") || "null");
   if (saved) { $("#codeIn").value = saved.code; $("#nameIn").value = saved.name; }
@@ -66,12 +67,24 @@ async function join() {
   const c = $("#codeIn").value.trim(), name = $("#nameIn").value.trim();
   if (!/^\d{4}$/.test(c)) return ($("#joinMsg").textContent = "수업 코드 4자리를 확인해 주세요.");
   if (!name) return ($("#joinMsg").textContent = "이름을 입력해 주세요.");
-  if (!be) return;
-  const r = await be.getRoom(GAME, c);
-  if (!r) return ($("#joinMsg").textContent = "그런 수업 코드가 없어요. 선생님 화면의 코드를 확인해 주세요.");
-  code = c;
-  localStorage.setItem("econ-lab-me", JSON.stringify({ code: c, name }));
-  await be.updatePlayer(GAME, c, be.uid, { name, joinedAt: Date.now() });
+  const btn = $("#joinBtn");
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = "연결 중…";
+  $("#joinMsg").textContent = "";
+  try {
+    if (!be) be = await bePromise;
+    const r = await withTimeout(be.getRoom(GAME, c));
+    if (!r) { $("#joinMsg").textContent = "그런 수업 코드가 없어요. 선생님 화면의 코드와 게임 종류(경제 실험실)를 확인해 주세요."; return; }
+    code = c;
+    localStorage.setItem("econ-lab-me", JSON.stringify({ code: c, name }));
+    await withTimeout(be.updatePlayer(GAME, c, be.uid, { name, joinedAt: Date.now() }));
+  } catch (e) {
+    console.error(e);
+    $("#joinMsg").innerHTML = `<b style="color:var(--bad)">⚠️ ${esc(explainError(e))}</b>`;
+    return;
+  } finally {
+    btn.disabled = false; btn.textContent = "들어가기";
+  }
   $("#joinView").classList.add("hidden");
   $("#gameView").classList.remove("hidden");
   $("#meName").textContent = name;
