@@ -59,7 +59,8 @@ function toast(msg) { const t = document.createElement("div"); t.className = "to
 })();
 
 $("#joinBtn").onclick = join;
-$("#nameIn").onkeydown = (e) => e.key === "Enter" && join();
+// 엔터 키로 들어가기 (다른 키는 막지 않음, 한글 입력 중 엔터는 무시)
+$("#nameIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) join(); });
 
 async function join() {
   const c = $("#codeIn").value.trim(), name = $("#nameIn").value.trim();
@@ -75,9 +76,9 @@ async function join() {
   $("#gameView").classList.remove("hidden");
   $("#meName").textContent = name;
   be.watchRoom(GAME, c, (rr) => { room = rr; render(); });
-  be.watchPlayers(GAME, c, (ps) => {
-    players = ps || {};
-    me = players[be.uid] || null;
+  // 내 정보만 지켜봄 (반 전체를 지켜보면 Firebase 읽기 횟수가 학생 수만큼 늘어남)
+  be.watchPlayer(GAME, c, be.uid, (p) => {
+    me = p;
     if (!me && room) { $("#screen").innerHTML = `<div class="center wait"><div class="big-emoji">🚪</div><h2>선생님이 내보냈어요</h2><p class="muted">다시 들어가려면 새로고침하세요.</p></div>`; return; }
     render();
   });
@@ -88,7 +89,11 @@ const left = () => (room && room.endsAt ? Math.ceil((room.endsAt - Date.now()) /
 
 function setupDeck() {
   const sets = (room.settings && room.settings.sets) || [1, 2, 3, 4];
-  deck = shuffle(QUESTIONS.filter((q) => sets.includes(q.set)));
+  // 문제 순서와 보기 순서를 모두 섞음 (정답 위치가 매번 달라지도록)
+  deck = shuffle(QUESTIONS.filter((q) => sets.includes(q.set))).map((q) => {
+    const order = shuffle(q.o.map((_, i) => i));
+    return { ...q, o: order.map((i) => q.o[i]), a: order.indexOf(q.a) };
+  });
   qi = 0;
 }
 
@@ -132,9 +137,10 @@ function render() {
     s.innerHTML = `${head}${L ? `<div class="center"><div class="muted">이번 라운드</div><div class="result-delta ${L.delta < 0 ? "neg" : "pos"}">${signed(L.delta)}</div><p>${esc(L.note)}</p></div>` : `<p class="center muted">이번 라운드에는 참여하지 않았어요.</p>`}
       <div class="explain">📖 ${r.concept}</div><p class="center muted">선생님 화면에서 반 전체 결과를 봐요.</p>`;
   } else if (room.phase === "end") {
-    const rows = Object.values(players).map((p) => p.cash ?? START_CASH).sort((a, b) => b - a);
+    // 순위는 선생님이 마지막 라운드 결과에 저장한 재산 목록으로 계산
+    const rows = ((room.result && room.result.rows) || []).map((x) => x.cash).sort((a, b) => b - a);
     const rank = rows.indexOf(me.cash ?? START_CASH) + 1;
-    s.innerHTML = `<div class="center wait"><div class="big-emoji">🏆</div><h2>게임 끝!</h2><p>내 최종 재산</p><div class="result-delta">${won(me.cash ?? START_CASH)}</div><p>${rows.length}명 중 <b>${rank}등</b></p></div>`;
+    s.innerHTML = `<div class="center wait"><div class="big-emoji">🏆</div><h2>게임 끝!</h2><p>내 최종 재산</p><div class="result-delta">${won(me.cash ?? START_CASH)}</div>${rank > 0 ? `<p>${rows.length}명 중 <b>${rank}등</b></p>` : ""}</div>`;
   }
   tick();
 }

@@ -106,7 +106,7 @@ function toast(m) { const t = document.createElement("div"); t.className = "toas
 const pct = (x) => (x > 0 ? "+" : "") + x.toFixed(1) + "%";
 
 $("#pwBtn").onclick = login;
-$("#pw").onkeydown = (e) => e.key === "Enter" && login();
+$("#pw").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) login(); });
 if (sessionStorage.getItem("econ-teacher") === "ok") login(true);
 
 async function login(skip) {

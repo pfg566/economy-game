@@ -121,7 +121,7 @@ function toast(msg) {
 
 /* ---------- 로그인 ---------- */
 $("#pwBtn").onclick = login;
-$("#pw").onkeydown = (e) => e.key === "Enter" && login();
+$("#pw").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) login(); });
 if (sessionStorage.getItem("econ-teacher") === "ok") login(true);
 
 async function login(skip) {
@@ -148,7 +148,7 @@ async function createRoom() {
   await be.setRoom(GAME, c, {
     game: GAME, host: be.uid, createdAt: Date.now(),
     phase: "lobby", roundIdx: 0, seq: 0, endsAt: 0, taxRate: 0,
-    settings: { sets: [1, 2, 3, 4], workSec: 90, chooseSec: 40, fineOn: false, envTax: false },
+    settings: { sets: [1, 2, 3, 4, 5], workSec: 90, chooseSec: 40, fineOn: false, envTax: false },
     stats: {}, result: null,
   });
   openRoom(c);
